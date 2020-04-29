@@ -1,0 +1,117 @@
+---
+title: "Machine Learning Project"
+author: "Kudakwashe Mhandire"
+date: "29/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+This project aims to predict and classify how dumbell curls (outcome variable is called classe) were carried out using data from accelerators fitted to each of the 6 study participants' belt, forearm, arm and dumbell. Each participant performed 10 repitition of the curls according to methods A-E as described by Ugulino et., 2012. This analysis involves 2 methods of classification, decision tree and random forest which were fitted on 70% pml_training data set and validated on the remaining 30%. The more accurate of the 2 methods will be used to predict the classes of 20 observations in a separate pml_testing data set.   
+
+## Load and explore the data sets.
+```{r}
+#Load training data
+library(readr)
+raw_training <- read.csv("~/Coursera/Coursera/Machine learning project/pml-training.csv")
+str(raw_training)
+# Load testing data
+raw_testing <- read.csv("~/Coursera/Coursera/Machine learning project/pml-testing.csv")
+str(raw_testing)
+```
+
+Here we see that the training data set has 19622 observations of 160 variables, while the testing data set has 20 observations of the 160 variables. The str() function shows that the data has a lot of missing data given as "NA", hence the data needed cleaning before the final analysis.
+
+## Data cleaning 
+The data cleaning will eliminate; columns with NAs, those with near zero variation and all variables that are unrelated to the expected classes.  
+
+```{r}
+#Removing columns with NA values
+training <- raw_training[,colSums(is.na(raw_training))==0]
+dim(training)
+testing <- raw_testing[,colSums(is.na(raw_testing))==0]
+dim(testing)
+
+# Removing variables with near zero values 
+library(caret)
+library(kernlab)
+near_zero <- nearZeroVar(training, saveMetrics = TRUE)
+training <- training[, near_zero$nzv==FALSE] 
+dim(training)
+
+near_zero <- nearZeroVar(testing, saveMetrics = TRUE)
+testing <- testing[, near_zero$nzv==FALSE] 
+dim(testing)
+
+## Remove unnecessary variables
+training <- training[, -c(1:6)]
+testing <- testing[, -c(1:6)]
+dim(training)
+dim(testing)
+```
+The data cleaning reduced the number of variables from 160 to 53.
+
+## Data slicing
+This section partitions the training data set into the trainD (70%) and validate (30%) sets for training and validation respectively.
+```{r}
+# Partition the training data set to create train and validate data sets
+set.seed(10000)
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+trainD <- training[inTrain,]
+validate <- training[-inTrain,]
+dim(trainD)
+dim(validate)
+```
+
+# Classification using decision tree
+## Fitting the decision tree model
+The rpart and rpart.plot packages under caret model the decision tree classification and plot the tree using the trainD set. The classe variable (the outcome) is converted from character variable to a factor.
+```{r} 
+library(rpart)
+library(rpart.plot)
+library(rattle)
+trainD$classe <- as.factor(trainD$classe)
+modtree <- rpart(classe~., data =trainD, method="class")
+# Plot the prediction tree
+rpart.plot(modtree, type=3, digits = 1, fallen.leaves = TRUE)
+```
+
+
+## Testing the model (modtree) on the validate data
+```{r}
+validate$classe <- as.factor(validate$classe)
+pred_vali <- predict (modtree, newdata=validate, type="class")
+confusionMatrix(validate$classe, pred_vali)
+```
+The decision tree predicts the validate set with 72.6% accuracy, giving an out of sample error of 0.274.
+
+# Classification using random forest 
+## Model buiding and validation
+The randomForest package runs the random forest modelling faster than the caret packege on its own. The random forest model (modrf) was used to predict the valiadate data set.
+```{r}
+library(randomForest)
+set.seed(10000)
+modrf <- randomForest(classe~., data=trainD, method="class")
+pred_rf <- predict(modrf, newdata=validate)
+confusionMatrix(validate$classe, pred_rf)
+```
+The modrf model improves the accuracy of the classification from 72.4% under the decision tree to 99.6% with an out of sample error of just 0.004. 
+
+## Prediction of 20 test sample
+Due to its competitive accuracy of near 100% the random forest model was used to predict the 20 test samples as shown below.  
+
+```{r}
+test20 <- predict(modrf, testing)
+test20
+```
+
+## Conclusion
+The random forest model predicts the exercise class more accurately than the decision tree. This is because the random forest technique performs multiple iterations of the classification tree hence reduces the misclassification error. 
+
+## Reference
+1. Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz6Kzt29mu4
